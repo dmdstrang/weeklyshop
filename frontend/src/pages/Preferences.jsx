@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchMealLibrary, rateMeal, saveMealToLibrary, generateMeal } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import BottomSheet from '../components/BottomSheet';
 
 export default function Preferences() {
   const [meals, setMeals] = useState([]);
@@ -140,40 +141,30 @@ function FavPicker({ meals, onRate, onClose }) {
     : nonFav;
 
   return (
-    <div className="swapper-overlay" onClick={onClose}>
-      <div className="swapper-sheet" onClick={e => e.stopPropagation()}>
-        <div className="swapper-handle" />
+    <BottomSheet onClose={onClose}>
+      <div className="swapper-inner">
         <p className="swapper-title">Add favourite</p>
-
         <div className="swapper-search-wrap">
-          <input
-            ref={inputRef}
-            className="swapper-search"
-            type="text"
-            placeholder="Search meals…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+          <input ref={inputRef} className="swapper-search" type="text"
+            placeholder="Search meals…" value={query} onChange={e => setQuery(e.target.value)} />
         </div>
-
-        <ul className="swapper-list">
-          {filtered.map(m => (
-            <li key={m.id} className="swapper-item" onClick={() => { onRate(m.id, 'liked'); onClose(); }}>
-              <span className="swapper-cat-tag">{m.category}</span>
-              <div className="swapper-info">
-                <span className="swapper-name">{m.name}</span>
-                {m.description && <span className="swapper-desc">{m.description}</span>}
-              </div>
-            </li>
-          ))}
-          {filtered.length === 0 && (
-            <li className="swapper-empty">No meals match</li>
-          )}
-        </ul>
-
+        <div className="swapper-scroll">
+          <ul className="swapper-list">
+            {filtered.map(m => (
+              <li key={m.id} className="swapper-item" onClick={() => { onRate(m.id, 'liked'); onClose(); }}>
+                <span className="swapper-cat-tag">{m.category}</span>
+                <div className="swapper-info">
+                  <span className="swapper-name">{m.name}</span>
+                  {m.description && <span className="swapper-desc">{m.description}</span>}
+                </div>
+              </li>
+            ))}
+            {filtered.length === 0 && <li className="swapper-empty">No meals match</li>}
+          </ul>
+        </div>
         <button className="swapper-close" onClick={onClose}>Cancel</button>
       </div>
-    </div>
+    </BottomSheet>
   );
 }
 
@@ -229,9 +220,8 @@ function AddMealSheet({ onSaved, onClose }) {
   }
 
   return (
-    <div className="swapper-overlay" onClick={onClose}>
-      <div className="swapper-sheet" onClick={e => e.stopPropagation()}>
-        <div className="swapper-handle" />
+    <BottomSheet onClose={onClose}>
+      <div className="swapper-inner">
         <p className="swapper-title">Add a meal</p>
 
         {mode === 'choose' && (
@@ -331,7 +321,7 @@ function AddMealSheet({ onSaved, onClose }) {
           </form>
         )}
       </div>
-    </div>
+    </BottomSheet>
   );
 }
 

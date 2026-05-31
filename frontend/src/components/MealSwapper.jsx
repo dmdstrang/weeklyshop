@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { fetchAlternatives, searchMeals, generateMeal, saveMealToLibrary } from '../lib/api';
+import BottomSheet from './BottomSheet';
 
 export default function MealSwapper({ day, currentMeal, onSelect, onClose }) {
   const [query, setQuery] = useState('');
@@ -28,7 +29,7 @@ export default function MealSwapper({ day, currentMeal, onSelect, onClose }) {
       }
     }
     loadDefaults();
-    setTimeout(() => inputRef.current?.focus(), 300);
+    setTimeout(() => inputRef.current?.focus(), 350);
   }, [currentMeal]);
 
   useEffect(() => {
@@ -57,22 +58,18 @@ export default function MealSwapper({ day, currentMeal, onSelect, onClose }) {
     setGenerateError(null);
     try {
       const res = await generateMeal(query, currentMeal?.category || '');
-      if (res.meal) {
-        setGenerated(res.meal);
-      } else if (res.error) {
-        setGenerateError(res.error.includes('ANTHROPIC_API_KEY')
-          ? 'Add your Anthropic API key to backend/.env to enable AI generation'
-          : res.error);
-      }
-    } catch (e) {
-      setGenerateError('Could not generate recipe — check the backend is running');
+      if (res.meal) setGenerated(res.meal);
+      else setGenerateError(res.error?.includes('ANTHROPIC_API_KEY')
+        ? 'Add your Anthropic API key to backend/.env'
+        : res.error || 'Generation failed');
+    } catch {
+      setGenerateError('Could not reach backend');
     } finally {
       setGenerating(false);
     }
   }
 
   async function handleUseGenerated() {
-    // Use as a one-off without saving
     onSelect(day, { ...generated, id: `generated-${Date.now()}` });
   }
 
@@ -89,9 +86,8 @@ export default function MealSwapper({ day, currentMeal, onSelect, onClose }) {
   const showGenerateBtn = query.trim().length > 2 && !loading && !searching;
 
   return (
-    <div className="swapper-overlay" onClick={onClose}>
-      <div className="swapper-sheet" onClick={e => e.stopPropagation()}>
-        <div className="swapper-handle" />
+    <BottomSheet onClose={onClose}>
+      <div className="swapper-inner">
         <p className="swapper-title">
           {day ? `${day.charAt(0).toUpperCase() + day.slice(1)} — swap meal` : 'Swap meal'}
         </p>
@@ -108,68 +104,68 @@ export default function MealSwapper({ day, currentMeal, onSelect, onClose }) {
           {searching && <span className="swapper-search-spinner" />}
         </div>
 
-        {/* Generated recipe card */}
-        {generated && (
-          <div className="generated-card">
-            <div className="generated-card__header">
-              <span className="generated-badge">Generated</span>
-              <span className="generated-card__category">{generated.category}</span>
+        <div className="swapper-scroll">
+          {/* Generated recipe card */}
+          {generated && (
+            <div className="generated-card" style={{margin:'12px 16px 0'}}>
+              <div className="generated-card__header">
+                <span className="generated-badge">Generated</span>
+                <span className="generated-card__category">{generated.category}</span>
+              </div>
+              <p className="generated-card__name">{generated.name}</p>
+              {generated.description && <p className="generated-card__desc">{generated.description}</p>}
+              <div className="generated-card__meta">
+                {generated.prep_time && <span>Prep {generated.prep_time}</span>}
+                {generated.cook_time && <span>Cook {generated.cook_time}</span>}
+              </div>
+              <div className="generated-card__actions">
+                <button className="gen-use-btn" onClick={handleUseGenerated}>Use once</button>
+                <button className="gen-save-btn" onClick={handleSaveAndUse} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save to library & use'}
+                </button>
+              </div>
             </div>
-            <p className="generated-card__name">{generated.name}</p>
-            {generated.description && <p className="generated-card__desc">{generated.description}</p>}
-            <div className="generated-card__meta">
-              {generated.prep_time && <span>Prep {generated.prep_time}</span>}
-              {generated.cook_time && <span>Cook {generated.cook_time}</span>}
-            </div>
-            <div className="generated-card__actions">
-              <button className="gen-use-btn" onClick={handleUseGenerated}>
-                Use once
+          )}
+
+          {/* Generate / add new button */}
+          {showGenerateBtn && !generated && (
+            <div className="generate-wrap">
+              <p className="generate-label">Not in your library?</p>
+              <button className="generate-btn" onClick={handleGenerate} disabled={generating}>
+                {generating
+                  ? <><span className="generate-spinner" /> Creating recipe…</>
+                  : `Generate "${query}" with AI`}
               </button>
-              <button className="gen-save-btn" onClick={handleSaveAndUse} disabled={saving}>
-                {saving ? 'Saving…' : 'Save to library & use'}
-              </button>
+              {generateError && <p className="generate-error">{generateError}</p>}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Generate button */}
-        {showGenerateBtn && !generated && (
-          <div className="generate-wrap">
-            <p className="generate-label">Not finding what you want?</p>
-            <button className="generate-btn" onClick={handleGenerate} disabled={generating}>
-              {generating
-                ? <><span className="generate-spinner" /> Creating recipe…</>
-                : `Generate "${query}" with AI`}
-            </button>
-            {generateError && <p className="generate-error">{generateError}</p>}
-          </div>
-        )}
+          {/* Results */}
+          {!loading && results.length > 0 && (
+            <>
+              {query.trim()
+                ? <p className="swapper-results-label">From your library</p>
+                : currentMeal && <p className="swapper-results-label">Other {currentMeal.category} meals</p>}
+              <ul className="swapper-list">
+                {results.map(meal => (
+                  <li key={meal.id} className="swapper-item" onClick={() => onSelect(day, meal)}>
+                    <span className="swapper-cat-tag">{meal.category}</span>
+                    <div className="swapper-info">
+                      <span className="swapper-name">{meal.name}</span>
+                      {meal.description && <span className="swapper-desc">{meal.description}</span>}
+                    </div>
+                    {meal.user_rating === 'liked' && <span className="swapper-liked">♥</span>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
-        {/* Existing results */}
-        {!loading && results.length > 0 && (
-          <>
-            {query.trim()
-              ? <p className="swapper-results-label">From your library</p>
-              : currentMeal && <p className="swapper-results-label">Other {currentMeal.category} meals</p>}
-            <ul className="swapper-list">
-              {results.map(meal => (
-                <li key={meal.id} className="swapper-item" onClick={() => onSelect(day, meal)}>
-                  <span className="swapper-cat-tag">{meal.category}</span>
-                  <div className="swapper-info">
-                    <span className="swapper-name">{meal.name}</span>
-                    {meal.description && <span className="swapper-desc">{meal.description}</span>}
-                  </div>
-                  {meal.user_rating === 'liked' && <span className="swapper-liked">♥</span>}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {loading && <p className="swapper-loading">Loading…</p>}
+          {loading && <p className="swapper-loading">Loading…</p>}
+        </div>
 
         <button className="swapper-close" onClick={onClose}>Cancel</button>
       </div>
-    </div>
+    </BottomSheet>
   );
 }
