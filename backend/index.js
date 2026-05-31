@@ -9,7 +9,15 @@ import shoppingRoutes from './routes/shopping.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  /\.vercel\.app$/,
+];
+app.use(cors({ origin: (origin, cb) => {
+  if (!origin) return cb(null, true);
+  if (allowedOrigins.some(o => o instanceof RegExp ? o.test(origin) : o === origin)) return cb(null, true);
+  cb(new Error('Not allowed by CORS'));
+}}));
 app.use(express.json());
 
 app.use('/api/mealplan', mealplanRoutes);
