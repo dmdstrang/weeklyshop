@@ -12,22 +12,30 @@ function pepestoHeaders() {
   };
 }
 
+// Safely parse response — Pepesto sometimes returns plain text errors even on 200
+async function safeJson(response) {
+  const text = await response.text();
+  try {
+    return { ok: response.ok, status: response.status, data: JSON.parse(text) };
+  } catch {
+    return { ok: false, status: response.status, data: null, error: text };
+  }
+}
+
 // POST /api/pepesto/match?week=2026-06-01
-// Matches shopping list items to Sainsbury's products with prices
 router.post('/match', async (req, res) => {
   const { week } = req.query;
   if (!process.env.PEPESTO_API_KEY) {
     return res.status(503).json({ error: 'PEPESTO_API_KEY not set in environment' });
   }
 
-  // Fetch shopping list
   const { data: list } = await supabase
     .from('shopping_list').select('items').eq('week_start', week).single();
-
   if (!list) return res.status(404).json({ error: 'Shopping list not found — generate it first' });
 
   const items = list.items.filter(i => !i.checked);
   const shoppingText = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`).join('\n');
+  console.log('Pepesto match request:\n', shoppingText);
 
   try {
     const response = await fetch(`${PEPESTO_BASE}/api/products`, {
@@ -39,12 +47,8 @@ router.post('/match', async (req, res) => {
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      return res.status(response.status).json({ error: err });
-    }
-
-    const data = await response.json();
+    const { ok, data, error } = await safeJson(response);
+    if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -52,7 +56,6 @@ router.post('/match', async (req, res) => {
 });
 
 // POST /api/pepesto/checkout?week=2026-06-01
-// Uses oneshot to get a direct Sainsbury's checkout URL
 router.post('/checkout', async (req, res) => {
   const { week } = req.query;
   if (!process.env.PEPESTO_API_KEY) {
@@ -61,7 +64,6 @@ router.post('/checkout', async (req, res) => {
 
   const { data: list } = await supabase
     .from('shopping_list').select('items').eq('week_start', week).single();
-
   if (!list) return res.status(404).json({ error: 'Shopping list not found — generate it first' });
 
   const items = list.items.filter(i => !i.checked);
@@ -77,15 +79,10 @@ router.post('/checkout', async (req, res) => {
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      return res.status(response.status).json({ error: err });
-    }
-
-    const data = await response.json();
+    const { ok, data, error } = await safeJson(response);
     console.log('Pepesto oneshot response:', JSON.stringify(data, null, 2));
+    if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
 
-    // Mark list as sent
     await supabase.from('shopping_list')
       .update({ sent_to_sainsburys: true, sent_at: new Date().toISOString() })
       .eq('week_start', week);
@@ -96,18 +93,15 @@ router.post('/checkout', async (req, res) => {
   }
 });
 
-// GET /api/pepesto/credits — check remaining credits
+// GET /api/pepesto/credits
 router.get('/credits', async (_req, res) => {
-  if (!process.env.PEPESTO_API_KEY) {
-    return res.status(503).json({ error: 'PEPESTO_API_KEY not set' });
-  }
+  if (!process.env.PEPESTO_API_KEY) return res.status(503).json({ error: 'PEPESTO_API_KEY not set' });
   try {
     const response = await fetch(`${PEPESTO_BASE}/api/credits`, {
-      method: 'POST',
-      headers: pepestoHeaders(),
-      body: JSON.stringify({}),
+      method: 'POST', headers: pepestoHeaders(), body: JSON.stringify({}),
     });
-    const data = await response.json();
+    const { data, error } = await safeJson(response);
+    if (error) return res.status(500).json({ error });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
