@@ -34,8 +34,8 @@ router.post('/match', async (req, res) => {
       method: 'POST',
       headers: pepestoHeaders(),
       body: JSON.stringify({
-        shopping_list: shoppingText,
-        supermarket: SAINSBURYS_DOMAIN,
+        content_text: shoppingText,
+        supermarket_domain: SAINSBURYS_DOMAIN,
       }),
     });
 
@@ -72,8 +72,8 @@ router.post('/checkout', async (req, res) => {
       method: 'POST',
       headers: pepestoHeaders(),
       body: JSON.stringify({
-        shopping_list: shoppingText,
-        supermarket: SAINSBURYS_DOMAIN,
+        content_text: shoppingText,
+        supermarket_domain: SAINSBURYS_DOMAIN,
       }),
     });
 
@@ -83,13 +83,14 @@ router.post('/checkout', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('Pepesto oneshot response:', JSON.stringify(data, null, 2));
 
     // Mark list as sent
     await supabase.from('shopping_list')
       .update({ sent_to_sainsburys: true, sent_at: new Date().toISOString() })
       .eq('week_start', week);
 
-    res.json(data); // Contains checkout_url
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
