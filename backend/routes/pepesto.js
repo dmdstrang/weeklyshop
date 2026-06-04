@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { supabase } from '../lib/supabase.js';
 
 const router = Router();
-const PEPESTO_BASE = 'https://www.pepesto.com';
+const PEPESTO_BASE = 'https://s.pepesto.com';
 const SAINSBURYS_DOMAIN = 'sainsburys.co.uk';
 
 function pepestoHeaders() {
