@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { addToBasketDirect } from '../playwright/addToBasketDirect.js';
 
 const router = Router();
 const PEPESTO_BASE = 'https://s.pepesto.com';
 const SAINSBURYS_DOMAIN = 'sainsburys.co.uk';
+const PANTRY_AISLES = ['condiments', 'spices', 'alcohol'];
 
 function pepestoHeaders() {
   return {
@@ -12,7 +14,6 @@ function pepestoHeaders() {
   };
 }
 
-// Safely parse response — Pepesto sometimes returns plain text errors even on 200
 async function safeJson(response) {
   const text = await response.text();
   try {
@@ -22,7 +23,6 @@ async function safeJson(response) {
   }
 }
 
-// Split array into chunks
 function chunk(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
@@ -31,7 +31,7 @@ function chunk(arr, size) {
 
 async function pepestoProducts(shoppingText) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout per batch
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const response = await fetch(`${PEPESTO_BASE}/api/products`, {
       method: 'POST',
@@ -49,11 +49,10 @@ async function pepestoProducts(shoppingText) {
 }
 
 // POST /api/pepesto/match?week=2026-06-01
+// Match shopping list items to Sainsbury's products — shows names and prices
 router.post('/match', async (req, res) => {
   const { week } = req.query;
-  if (!process.env.PEPESTO_API_KEY) {
-    return res.status(503).json({ error: 'PEPESTO_API_KEY not set in environment' });
-  }
+  if (!process.env.PEPESTO_API_KEY) return res.status(503).json({ error: 'PEPESTO_API_KEY not set' });
 
   const { data: list } = await supabase
     .from('shopping_list').select('items').eq('week_start', week).single();
@@ -63,64 +62,80 @@ router.post('/match', async (req, res) => {
   const lines = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`);
 
   try {
-    // Pepesto has a ~12 ingredient limit — batch and run in parallel
     const batches = chunk(lines, 12);
     const batchResults = await Promise.all(batches.map(b => pepestoProducts(b.join('\n'))));
-
     const results = [];
-    for (const { ok, data, error } of batchResults) {
+    for (const { data, error } of batchResults) {
       if (error) console.warn('Batch error:', error);
       if (data?.items) results.push(...data.items);
     }
-
     res.json({ items: results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Aisles unlikely to need buying (pantry staples people usually have)
-const PANTRY_AISLES = ['condiments', 'spices', 'alcohol'];
-
 // POST /api/pepesto/checkout?week=2026-06-01
+// 1. Pepesto matches items → gets exact Sainsbury's product URLs
+// 2. Playwright logs in and adds each product directly by URL
+// Streams SSE progress
 router.post('/checkout', async (req, res) => {
   const { week } = req.query;
-  if (!process.env.PEPESTO_API_KEY) {
-    return res.status(503).json({ error: 'PEPESTO_API_KEY not set in environment' });
-  }
+  const { email, password } = req.body;
+
+  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+  if (!process.env.PEPESTO_API_KEY) return res.status(503).json({ error: 'PEPESTO_API_KEY not set' });
 
   const { data: list } = await supabase
     .from('shopping_list').select('items').eq('week_start', week).single();
   if (!list) return res.status(404).json({ error: 'Shopping list not found — generate it first' });
 
-  // Filter out pantry staples and already-checked items, limit to 12 for Pepesto
-  const items = list.items
-    .filter(i => !i.checked && !PANTRY_AISLES.includes(i.aisle))
-    .slice(0, 12);
-  const shoppingText = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`).join('\n');
+  const items = list.items.filter(i => !i.checked && !PANTRY_AISLES.includes(i.aisle));
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  send({ type: 'progress', step: 'Finding products on Sainsbury\'s…' });
 
   try {
-    const response = await fetch(`${PEPESTO_BASE}/api/oneshot`, {
-      method: 'POST',
-      headers: pepestoHeaders(),
-      body: JSON.stringify({
-        content_text: shoppingText,         // oneshot uses content_text, not manual_shopping_list
-        supermarket_domain: SAINSBURYS_DOMAIN,
-      }),
-    });
+    // Step 1: Pepesto matches items to exact Sainsbury's product URLs
+    const lines = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`);
+    const batches = chunk(lines, 12);
+    const batchResults = await Promise.all(batches.map(b => pepestoProducts(b.join('\n'))));
 
-    const { ok, data, error } = await safeJson(response);
-    console.log('Pepesto oneshot response:', JSON.stringify(data, null, 2));
-    if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
+    const products = [];
+    for (const { data } of batchResults) {
+      if (!data?.items) continue;
+      for (const item of data.items) {
+        const best = item.products?.[0]?.product;
+        if (best?.product_id) {
+          products.push({
+            itemName: item.item_name,
+            name: best.product_name,
+            url: best.product_id,
+          });
+        }
+      }
+    }
+
+    send({ type: 'progress', step: `Matched ${products.length} products. Opening Sainsbury's…` });
+
+    // Step 2: Playwright adds each product directly by URL
+    const result = await addToBasketDirect({ email, password, products, onProgress: send });
 
     await supabase.from('shopping_list')
       .update({ sent_to_sainsburys: true, sent_at: new Date().toISOString() })
       .eq('week_start', week);
 
-    res.json(data);
+    send({ type: 'done', added: result.added, failed: result.failed });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    send({ type: 'error', message: err.message });
   }
+
+  res.end();
 });
 
 // GET /api/pepesto/credits
