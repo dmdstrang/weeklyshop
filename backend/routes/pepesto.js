@@ -22,6 +22,22 @@ async function safeJson(response) {
   }
 }
 
+// Split array into chunks
+function chunk(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+async function pepestoProducts(shoppingText) {
+  const response = await fetch(`${PEPESTO_BASE}/api/products`, {
+    method: 'POST',
+    headers: pepestoHeaders(),
+    body: JSON.stringify({ manual_shopping_list: shoppingText, supermarket_domain: SAINSBURYS_DOMAIN }),
+  });
+  return safeJson(response);
+}
+
 // POST /api/pepesto/match?week=2026-06-01
 router.post('/match', async (req, res) => {
   const { week } = req.query;
@@ -34,26 +50,27 @@ router.post('/match', async (req, res) => {
   if (!list) return res.status(404).json({ error: 'Shopping list not found — generate it first' });
 
   const items = list.items.filter(i => !i.checked);
-  const shoppingText = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`).join('\n');
-  console.log('Pepesto match request:\n', shoppingText);
+  const lines = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`);
 
   try {
-    const response = await fetch(`${PEPESTO_BASE}/api/products`, {
-      method: 'POST',
-      headers: pepestoHeaders(),
-      body: JSON.stringify({
-        manual_shopping_list: shoppingText,
-        supermarket_domain: SAINSBURYS_DOMAIN,
-      }),
-    });
+    // Pepesto has a ~15 ingredient limit — batch requests
+    const batches = chunk(lines, 12);
+    const results = [];
 
-    const { ok, data, error } = await safeJson(response);
-    if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
-    res.json(data);
+    for (const batch of batches) {
+      const { ok, data, error } = await pepestoProducts(batch.join('\n'));
+      if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
+      if (data?.items) results.push(...data.items);
+    }
+
+    res.json({ items: results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Aisles unlikely to need buying (pantry staples people usually have)
+const PANTRY_AISLES = ['condiments', 'spices', 'alcohol'];
 
 // POST /api/pepesto/checkout?week=2026-06-01
 router.post('/checkout', async (req, res) => {
@@ -66,7 +83,10 @@ router.post('/checkout', async (req, res) => {
     .from('shopping_list').select('items').eq('week_start', week).single();
   if (!list) return res.status(404).json({ error: 'Shopping list not found — generate it first' });
 
-  const items = list.items.filter(i => !i.checked);
+  // Filter out pantry staples and already-checked items, limit to 12 for Pepesto
+  const items = list.items
+    .filter(i => !i.checked && !PANTRY_AISLES.includes(i.aisle))
+    .slice(0, 12);
   const shoppingText = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`).join('\n');
 
   try {
