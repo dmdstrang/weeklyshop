@@ -123,13 +123,36 @@ export default function ShoppingList({ monday }) {
             <div className="matched-products">
               <p className="matched-title">Matched on Sainsbury's</p>
               <ul className="matched-list">
-                {(matchedProducts.items || matchedProducts.products || []).map((p, i) => (
-                  <li key={i} className="matched-item">
-                    <span className="matched-name">{p.name || p.product_name}</span>
-                    {p.price && <span className="matched-price">£{Number(p.price).toFixed(2)}</span>}
-                  </li>
-                ))}
+                {(matchedProducts.items || []).map((item, i) => {
+                  const best = item.products?.[0]?.product;
+                  if (!best) return null;
+                  const pricePence = best.price?.price;
+                  const promo = best.price?.promotion?.promo;
+                  return (
+                    <li key={i} className="matched-item">
+                      <div className="matched-item-info">
+                        <span className="matched-ingredient">{item.item_name}</span>
+                        <span className="matched-name">{best.product_name}</span>
+                      </div>
+                      <div className="matched-right">
+                        {pricePence && (
+                          <span className={`matched-price ${promo ? 'matched-price--promo' : ''}`}>
+                            £{(pricePence / 100).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
+              {matchedProducts.items?.length > 0 && (
+                <p className="matched-total">
+                  Est. total: £{(matchedProducts.items.reduce((sum, item) => {
+                    const p = item.products?.[0]?.product?.price?.price || 0;
+                    return sum + p;
+                  }, 0) / 100).toFixed(2)}
+                </p>
+              )}
             </div>
           )}
 

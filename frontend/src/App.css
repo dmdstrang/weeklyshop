@@ -289,9 +289,15 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; -we
   letter-spacing: 0.6px; color: var(--text-2); padding: 10px 14px 6px; }
 .matched-list { list-style: none; }
 .matched-item { display: flex; justify-content: space-between; align-items: center;
-  padding: 9px 14px; border-top: 1px solid var(--border); font-size: 13px; }
-.matched-name { color: var(--text); }
-.matched-price { color: var(--accent); font-weight: 600; }
+  padding: 10px 14px; border-top: 1px solid var(--border); gap: 8px; }
+.matched-item-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.matched-ingredient { font-size: 11px; color: var(--text-2); text-transform: capitalize; }
+.matched-name { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.matched-right { flex-shrink: 0; }
+.matched-price { font-size: 13px; color: var(--text); font-weight: 600; }
+.matched-price--promo { color: #dc2626; }
+.matched-total { font-size: 13px; font-weight: 700; color: var(--text); padding: 10px 14px;
+  border-top: 1px solid var(--border); text-align: right; }
 
 /* Matched products */
 .matched-products { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; }
