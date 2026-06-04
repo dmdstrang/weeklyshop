@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { fetchShoppingList, generateShoppingList, toggleShoppingItem } from '../lib/api';
 import { getNextMonday, toDateString } from '../lib/weeks';
 
-const AISLE_ORDER = ['produce', 'meat', 'fish', 'dairy', 'dry goods', 'frozen', 'condiments', 'bakery', 'alcohol', 'spices'];
+const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+
+const AISLE_ORDER = ['produce', 'meat', 'fish', 'dairy', 'dry goods', 'frozen', 'condiments', 'bakery', 'alcohol', 'spices', 'extras', 'other'];
 
 function groupByAisle(items) {
   const groups = {};
@@ -19,12 +21,9 @@ export default function ShoppingList({ monday }) {
   const [list, setList] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [sendStatus, setSendStatus] = useState(null); // null | 'sending' | { added, failed }
-  const [progress, setProgress] = useState([]);
-  const [creds, setCreds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sainsburys_creds') || '{}'); } catch { return {}; }
-  });
-  const [showCreds, setShowCreds] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState(null); // null | 'loading' | { url } | { error }
+  const [matching, setMatching] = useState(false);
+  const [matchedProducts, setMatchedProducts] = useState(null);
 
   useEffect(() => {
     fetchShoppingList(weekStr).then(data => { setList(data); setLoading(false); });
@@ -34,6 +33,7 @@ export default function ShoppingList({ monday }) {
     setGenerating(true);
     const data = await generateShoppingList(weekStr);
     setList(data);
+    setMatchedProducts(null);
     setGenerating(false);
   }
 
@@ -42,61 +42,57 @@ export default function ShoppingList({ monday }) {
     setList(updated);
   }
 
-  async function handleSendToSainsburys() {
-    if (!creds.email || !creds.password) { setShowCreds(true); return; }
-
-    setSendStatus('sending');
-    setProgress([]);
-
-    const res = await fetch('/api/sainsburys/add-to-basket', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ week: weekStr, email: creds.email, password: creds.password }),
-    });
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let added = [], failed = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      for (const line of chunk.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const evt = JSON.parse(line.slice(6));
-          if (evt.type === 'item_done') {
-            setProgress(p => [...p, evt]);
-            if (evt.success) added.push(evt.item);
-            else failed.push(evt);
-          }
-          if (evt.type === 'done') { added = evt.added; failed = evt.failed; }
-          if (evt.type === 'error') { setSendStatus({ error: evt.message }); return; }
-        } catch {}
-      }
+  // Step 1: match items to Sainsbury's products + show prices
+  async function handleMatch() {
+    setMatching(true);
+    setMatchedProducts(null);
+    try {
+      const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setMatchedProducts(data);
+    } catch (err) {
+      setCheckoutStatus({ error: err.message });
+    } finally {
+      setMatching(false);
     }
-
-    setSendStatus({ added, failed });
   }
 
-  function saveCreds(e) {
-    e.preventDefault();
-    localStorage.setItem('sainsburys_creds', JSON.stringify(creds));
-    setShowCreds(false);
-    handleSendToSainsburys();
+  // Step 2: get checkout URL via Pepesto oneshot
+  async function handleCheckout() {
+    setCheckoutStatus('loading');
+    try {
+      const res = await fetch(`${BASE}/pepesto/checkout?week=${weekStr}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      // Open the checkout URL
+      const url = data.checkout_url || data.url || data.redirect_url;
+      if (url) {
+        setCheckoutStatus({ url });
+        window.open(url, '_blank');
+      } else {
+        setCheckoutStatus({ error: 'No checkout URL returned — check Pepesto API response' });
+      }
+    } catch (err) {
+      setCheckoutStatus({ error: err.message });
+    }
   }
 
   if (loading) return <div className="page"><div className="loading">Loading…</div></div>;
 
   const items = list?.items || [];
+  const mealItems = items.filter(i => !i.isExtra);
+  const extraItems = items.filter(i => i.isExtra);
   const groups = groupByAisle(items);
   const aisles = [...new Set([...AISLE_ORDER, ...Object.keys(groups)])].filter(a => groups[a]);
+  const uncheckedCount = items.filter(i => !i.checked).length;
 
   return (
     <div className="page">
       <h2 className="page-title">Shopping List</h2>
-      <p className="page-subtitle">Generated from this week&apos;s meal plan</p>
+      <p className="page-subtitle">
+        {items.length > 0 ? `${uncheckedCount} items remaining` : 'Generated from your meal plan'}
+      </p>
 
       <button className="secondary-btn" onClick={handleGenerate} disabled={generating}>
         {generating ? 'Regenerating…' : 'Regenerate from meal plan'}
@@ -108,7 +104,7 @@ export default function ShoppingList({ monday }) {
         <>
           {aisles.map(aisle => (
             <div key={aisle} className="aisle-group">
-              <h3 className="aisle-title">{aisle.charAt(0).toUpperCase() + aisle.slice(1)}</h3>
+              <h3 className="aisle-title">{aisle === 'extras' ? 'Extras' : aisle.charAt(0).toUpperCase() + aisle.slice(1)}</h3>
               <ul className="item-list">
                 {groups[aisle].map(item => (
                   <li key={item.name} className={`item ${item.checked ? 'item--checked' : ''}`}
@@ -122,50 +118,48 @@ export default function ShoppingList({ monday }) {
             </div>
           ))}
 
-          <button className="sainsburys-btn" onClick={handleSendToSainsburys}
-                  disabled={sendStatus === 'sending'}>
-            {sendStatus === 'sending' ? 'Adding to basket…' : "Add to Sainsbury's basket"}
-          </button>
-
-          {sendStatus === 'sending' && progress.length > 0 && (
-            <div className="progress-log">
-              {progress.map((p, i) => (
-                <div key={i} className={`progress-item ${p.success ? 'success' : 'fail'}`}>
-                  {p.success ? '✅' : '❌'} {p.item}
-                </div>
-              ))}
+          {/* Pepesto matched products preview */}
+          {matchedProducts && (
+            <div className="matched-products">
+              <p className="matched-title">Matched on Sainsbury's</p>
+              <ul className="matched-list">
+                {(matchedProducts.items || matchedProducts.products || []).map((p, i) => (
+                  <li key={i} className="matched-item">
+                    <span className="matched-name">{p.name || p.product_name}</span>
+                    {p.price && <span className="matched-price">£{Number(p.price).toFixed(2)}</span>}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          {sendStatus?.added && (
-            <div className="send-result">
-              <p>✅ Added {sendStatus.added.length} items</p>
-              {sendStatus.failed?.length > 0 && (
-                <p>❌ Couldn't find: {sendStatus.failed.map(f => f.item).join(', ')}</p>
-              )}
-            </div>
-          )}
-
-          {sendStatus?.error && <p className="error-msg">❌ {sendStatus.error}</p>}
-        </>
-      )}
-
-      {/* Credentials modal */}
-      {showCreds && (
-        <div className="swapper-overlay" onClick={() => setShowCreds(false)}>
-          <div className="swapper-sheet" onClick={e => e.stopPropagation()}>
-            <div className="swapper-handle" />
-            <h3 className="swapper-title">Sainsbury's login</h3>
-            <p className="creds-note">Stored locally on this device only</p>
-            <form onSubmit={saveCreds} className="creds-form">
-              <input type="email" placeholder="Email" value={creds.email || ''}
-                     onChange={e => setCreds(c => ({ ...c, email: e.target.value }))} required />
-              <input type="password" placeholder="Password" value={creds.password || ''}
-                     onChange={e => setCreds(c => ({ ...c, password: e.target.value }))} required />
-              <button type="submit" className="suggest-btn">Save & continue</button>
-            </form>
+          {/* Sainsbury's checkout buttons */}
+          <div className="checkout-section">
+            {!matchedProducts && (
+              <button className="sainsburys-btn sainsburys-btn--preview"
+                      onClick={handleMatch} disabled={matching}>
+                {matching ? 'Finding products…' : 'Preview on Sainsbury\'s'}
+              </button>
+            )}
+            <button className="sainsburys-btn" onClick={handleCheckout}
+                    disabled={checkoutStatus === 'loading'}>
+              {checkoutStatus === 'loading' ? 'Opening Sainsbury\'s…' : 'Send to Sainsbury\'s basket'}
+            </button>
           </div>
-        </div>
+
+          {checkoutStatus?.url && (
+            <div className="send-result">
+              <p>Sainsbury's basket is ready.</p>
+              <a href={checkoutStatus.url} target="_blank" rel="noreferrer" className="checkout-link">
+                Open Sainsbury's checkout
+              </a>
+            </div>
+          )}
+
+          {checkoutStatus?.error && (
+            <p className="error-msg">{checkoutStatus.error}</p>
+          )}
+        </>
       )}
     </div>
   );
