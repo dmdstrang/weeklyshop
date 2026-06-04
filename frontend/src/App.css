@@ -298,6 +298,9 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; -we
 .matched-price--promo { color: #dc2626; }
 .matched-total { font-size: 13px; font-weight: 700; color: var(--text); padding: 10px 14px;
   border-top: 1px solid var(--border); text-align: right; }
+.connect-prompt { background: var(--accent-light); border: 1px solid var(--accent-mid);
+  border-radius: var(--radius); padding: 14px; font-size: 14px; color: var(--text); line-height: 1.5; }
+.connect-hint { font-size: 12px; color: var(--text-2); margin-top: 6px; }
 
 /* Matched products */
 .matched-products { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchShoppingList, generateShoppingList, toggleShoppingItem } from '../lib/api';
 import { getNextMonday, toDateString } from '../lib/weeks';
-import BottomSheet from '../components/BottomSheet';
 
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 const AISLE_ORDER = ['produce', 'meat', 'fish', 'dairy', 'dry goods', 'frozen', 'condiments', 'bakery', 'alcohol', 'spices', 'extras', 'other'];
@@ -23,15 +22,20 @@ export default function ShoppingList({ monday }) {
   const [generating, setGenerating] = useState(false);
   const [matching, setMatching] = useState(false);
   const [matchedProducts, setMatchedProducts] = useState(null);
-  const [checkoutState, setCheckoutState] = useState(null); // null | 'creds' | 'running' | { done } | { error }
+  const [checkoutState, setCheckoutState] = useState(null); // null | 'running' | { done } | { error }
   const [progress, setProgress] = useState([]);
-  const [creds, setCreds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sainsburys_creds') || '{}'); } catch { return {}; }
-  });
+  const [sessionConnected, setSessionConnected] = useState(null); // null=unknown, bool
 
   useEffect(() => {
     fetchShoppingList(weekStr).then(data => { setList(data); setLoading(false); });
   }, [weekStr]);
+
+  useEffect(() => {
+    fetch(`${BASE}/pepesto/session-status`)
+      .then(r => r.json())
+      .then(d => setSessionConnected(d.connected))
+      .catch(() => setSessionConnected(false));
+  }, []);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -66,22 +70,7 @@ export default function ShoppingList({ monday }) {
     }
   }
 
-  function handleSendClick() {
-    if (!creds.email || !creds.password) {
-      setCheckoutState('creds');
-    } else {
-      runCheckout(creds.email, creds.password);
-    }
-  }
-
-  function handleSaveCreds(e) {
-    e.preventDefault();
-    localStorage.setItem('sainsburys_creds', JSON.stringify(creds));
-    setCheckoutState(null);
-    runCheckout(creds.email, creds.password);
-  }
-
-  async function runCheckout(email, password) {
+  async function runCheckout() {
     setCheckoutState('running');
     setProgress([]);
 
@@ -89,7 +78,7 @@ export default function ShoppingList({ monday }) {
       const res = await fetch(`${BASE}/pepesto/checkout?week=${weekStr}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({}),
       });
 
       const reader = res.body.getReader();
@@ -237,29 +226,19 @@ export default function ShoppingList({ monday }) {
                 {matching ? 'Finding products…' : 'Preview on Sainsbury\'s'}
               </button>
             )}
-            <button className="sainsburys-btn" onClick={handleSendClick} disabled={isRunning}>
-              {isRunning ? 'Adding to basket…' : 'Send to Sainsbury\'s basket'}
-            </button>
+
+            {sessionConnected === false ? (
+              <div className="connect-prompt">
+                <p>Connect your Sainsbury's account to enable one-tap basket filling.</p>
+                <p className="connect-hint">This is a one-time setup done from your computer — ask in the app chat to run "Connect Sainsbury's".</p>
+              </div>
+            ) : (
+              <button className="sainsburys-btn" onClick={runCheckout} disabled={isRunning || sessionConnected === null}>
+                {isRunning ? 'Adding to basket…' : 'Send to Sainsbury\'s basket'}
+              </button>
+            )}
           </div>
         </>
-      )}
-
-      {/* Credentials sheet */}
-      {checkoutState === 'creds' && (
-        <BottomSheet onClose={() => setCheckoutState(null)}>
-          <div className="swapper-inner">
-            <p className="swapper-title">Sainsbury's login</p>
-            <p className="creds-note" style={{padding:'0 16px 12px'}}>Stored on this device only — never sent to any server except Sainsbury's</p>
-            <form onSubmit={handleSaveCreds} className="creds-form" style={{padding:'0 16px'}}>
-              <input type="email" placeholder="Email" value={creds.email || ''}
-                onChange={e => setCreds(c => ({ ...c, email: e.target.value }))} required />
-              <input type="password" placeholder="Password" value={creds.password || ''}
-                onChange={e => setCreds(c => ({ ...c, password: e.target.value }))} required />
-              <button type="submit" className="primary-btn" style={{marginBottom:0}}>Save & add to basket</button>
-            </form>
-            <button className="swapper-close" onClick={() => setCheckoutState(null)}>Cancel</button>
-          </div>
-        </BottomSheet>
       )}
     </div>
   );

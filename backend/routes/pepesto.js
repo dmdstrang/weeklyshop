@@ -81,9 +81,6 @@ router.post('/match', async (req, res) => {
 // Streams SSE progress
 router.post('/checkout', async (req, res) => {
   const { week } = req.query;
-  const { email, password } = req.body;
-
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   if (!process.env.PEPESTO_API_KEY) return res.status(503).json({ error: 'PEPESTO_API_KEY not set' });
 
   const { data: list } = await supabase
@@ -123,8 +120,8 @@ router.post('/checkout', async (req, res) => {
 
     send({ type: 'progress', step: `Matched ${products.length} products. Opening Sainsbury's…` });
 
-    // Step 2: Playwright adds each product directly by URL
-    const result = await addToBasketDirect({ email, password, products, onProgress: send });
+    // Step 2: Playwright adds each product directly by URL (reuses stored session)
+    const result = await addToBasketDirect({ products, onProgress: send });
 
     await supabase.from('shopping_list')
       .update({ sent_to_sainsburys: true, sent_at: new Date().toISOString() })
@@ -136,6 +133,16 @@ router.post('/checkout', async (req, res) => {
   }
 
   res.end();
+});
+
+// GET /api/pepesto/session-status — is a Sainsbury's session connected?
+router.get('/session-status', async (_req, res) => {
+  const { data } = await supabase
+    .from('preferences').select('value, updated_at').eq('key', 'sainsburys_session').single();
+  res.json({
+    connected: !!data?.value,
+    capturedAt: data?.updated_at || null,
+  });
 });
 
 // GET /api/pepesto/credits
