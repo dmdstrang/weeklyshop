@@ -30,12 +30,22 @@ function chunk(arr, size) {
 }
 
 async function pepestoProducts(shoppingText) {
-  const response = await fetch(`${PEPESTO_BASE}/api/products`, {
-    method: 'POST',
-    headers: pepestoHeaders(),
-    body: JSON.stringify({ manual_shopping_list: shoppingText, supermarket_domain: SAINSBURYS_DOMAIN }),
-  });
-  return safeJson(response);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout per batch
+  try {
+    const response = await fetch(`${PEPESTO_BASE}/api/products`, {
+      method: 'POST',
+      headers: pepestoHeaders(),
+      signal: controller.signal,
+      body: JSON.stringify({ manual_shopping_list: shoppingText, supermarket_domain: SAINSBURYS_DOMAIN }),
+    });
+    return safeJson(response);
+  } catch (err) {
+    if (err.name === 'AbortError') return { ok: false, error: 'Request timed out' };
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // POST /api/pepesto/match?week=2026-06-01
@@ -53,13 +63,13 @@ router.post('/match', async (req, res) => {
   const lines = items.map(i => `${i.qty ? i.qty + ' ' : ''}${i.name}`);
 
   try {
-    // Pepesto has a ~15 ingredient limit — batch requests
+    // Pepesto has a ~12 ingredient limit — batch and run in parallel
     const batches = chunk(lines, 12);
-    const results = [];
+    const batchResults = await Promise.all(batches.map(b => pepestoProducts(b.join('\n'))));
 
-    for (const batch of batches) {
-      const { ok, data, error } = await pepestoProducts(batch.join('\n'));
-      if (!ok || error) return res.status(500).json({ error: error || 'Pepesto error' });
+    const results = [];
+    for (const { ok, data, error } of batchResults) {
+      if (error) console.warn('Batch error:', error);
       if (data?.items) results.push(...data.items);
     }
 

@@ -46,14 +46,19 @@ export default function ShoppingList({ monday }) {
   async function handleMatch() {
     setMatching(true);
     setMatchedProducts(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 35000);
     try {
-      const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, { method: 'POST' });
+      const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, {
+        method: 'POST', signal: controller.signal
+      });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setMatchedProducts(data);
     } catch (err) {
-      setCheckoutStatus({ error: err.message });
+      setCheckoutStatus({ error: err.name === 'AbortError' ? 'Timed out finding products — try again' : err.message });
     } finally {
+      clearTimeout(timeout);
       setMatching(false);
     }
   }
