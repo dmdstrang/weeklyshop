@@ -104,7 +104,7 @@ router.post('/checkout', async (req, res) => {
       method: 'POST',
       headers: pepestoHeaders(),
       body: JSON.stringify({
-        manual_shopping_list: shoppingText,
+        content_text: shoppingText,         // oneshot uses content_text, not manual_shopping_list
         supermarket_domain: SAINSBURYS_DOMAIN,
       }),
     });
