@@ -66,12 +66,12 @@ export default function ShoppingList({ monday }) {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       // Open the checkout URL
-      const url = data.checkout_url || data.url || data.redirect_url;
+      const url = data.redirect_url || data.checkout_url || data.url;
       if (url) {
         setCheckoutStatus({ url });
         window.open(url, '_blank');
       } else {
-        setCheckoutStatus({ error: 'No checkout URL returned — check Pepesto API response' });
+        setCheckoutStatus({ error: `No checkout URL returned. Response: ${JSON.stringify(data)}` });
       }
     } catch (err) {
       setCheckoutStatus({ error: err.message });
@@ -149,9 +149,9 @@ export default function ShoppingList({ monday }) {
 
           {checkoutStatus?.url && (
             <div className="send-result">
-              <p>Sainsbury's basket is ready.</p>
+              <p>Your basket is ready. Tap below to open it — you'll land on the checkout page, then proceed to Sainsbury's.</p>
               <a href={checkoutStatus.url} target="_blank" rel="noreferrer" className="checkout-link">
-                Open Sainsbury's checkout
+                Open basket →
               </a>
             </div>
           )}

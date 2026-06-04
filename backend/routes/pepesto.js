@@ -34,7 +34,7 @@ router.post('/match', async (req, res) => {
       method: 'POST',
       headers: pepestoHeaders(),
       body: JSON.stringify({
-        content_text: shoppingText,
+        manual_shopping_list: shoppingText,
         supermarket_domain: SAINSBURYS_DOMAIN,
       }),
     });
@@ -72,7 +72,7 @@ router.post('/checkout', async (req, res) => {
       method: 'POST',
       headers: pepestoHeaders(),
       body: JSON.stringify({
-        content_text: shoppingText,
+        manual_shopping_list: shoppingText,
         supermarket_domain: SAINSBURYS_DOMAIN,
       }),
     });
