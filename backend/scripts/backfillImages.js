@@ -7,8 +7,10 @@ import { ensureBucket, generateMealImage } from '../lib/images.js';
 async function main() {
   await ensureBucket();
 
-  const { data: meals, error } = await supabase
-    .from('meal_library').select('*').is('image_url', null);
+  const force = process.argv.includes('--force');
+  let query = supabase.from('meal_library').select('*');
+  if (!force) query = query.is('image_url', null);
+  const { data: meals, error } = await query;
 
   if (error) { console.error(error.message); process.exit(1); }
   console.log(`${meals.length} meals need images.\n`);

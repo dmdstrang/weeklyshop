@@ -18,9 +18,12 @@ export async function ensureBucket() {
 }
 
 function promptFor(meal) {
-  return `A beautiful, appetising overhead food photograph of "${meal.name}". `
-    + `Plated on a simple ceramic plate, soft natural daylight, shallow depth of field, `
-    + `clean minimal light background, professional food photography. No text, no hands, no cutlery clutter.`;
+  return `A vibrant, appetising overhead food photograph of "${meal.name}". `
+    + `Served on a colourful hand-painted patterned ceramic plate (Mediterranean majolica style), `
+    + `set on a bright, cheerfully patterned Mediterranean tablecloth. `
+    + `Warm sunny natural daylight, fresh ingredients, rich saturated colours, `
+    + `rustic Mediterranean styling, professional food photography, top-down flat lay. `
+    + `No text, no hands, no faces.`;
 }
 
 /**

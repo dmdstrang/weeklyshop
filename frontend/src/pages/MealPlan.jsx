@@ -6,7 +6,7 @@ import {
 } from '../lib/api';
 import { getNextMonday, toDateString, DAYS } from '../lib/weeks';
 import WeekNav from '../components/WeekNav';
-import DayCard from '../components/DayCard';
+import DaySlide from '../components/DaySlide';
 import MealSwapper from '../components/MealSwapper';
 import RecipeModal from '../components/RecipeModal';
 
@@ -150,73 +150,74 @@ export default function MealPlan() {
   function prevWeek() { setMonday(m => { const d = new Date(m); d.setDate(d.getDate() - 7); return d; }); }
   function nextWeek() { setMonday(m => { const d = new Date(m); d.setDate(d.getDate() + 7); return d; }); }
 
-  return (
-    <div className="page">
-      <WeekNav monday={monday} onPrev={prevWeek} onNext={nextWeek} />
+  function handleImageReady(mealId, imageUrl) {
+    setMealCache(prev => prev[mealId] ? { ...prev, [mealId]: { ...prev[mealId], image_url: imageUrl } } : prev);
+    setPlan(prev => {
+      const next = { ...prev };
+      for (const d of DAYS) {
+        if (next[d]?.meal?.id === mealId) next[d] = { ...next[d], meal: { ...next[d].meal, image_url: imageUrl } };
+      }
+      return next;
+    });
+  }
 
-      <button className="primary-btn" onClick={handleSuggestWeek} disabled={suggesting}>
-        {suggesting ? 'Suggesting…' : 'Suggest meals for this week'}
-      </button>
+  return (
+    <div className="plan-screen">
+      {/* Floating top bar */}
+      <div className="plan-topbar">
+        <WeekNav monday={monday} onPrev={prevWeek} onNext={nextWeek} />
+        <button className="suggest-pill" onClick={handleSuggestWeek} disabled={suggesting}>
+          {suggesting ? 'Suggesting…' : '✨ Suggest week'}
+        </button>
+      </div>
 
       {loading ? (
         <div className="loading">Loading plan…</div>
       ) : (
-        <>
-          <div className="day-list">
-            {DAYS.map(day => (
-              <DayCard
-                key={day}
+        <div className="swipe-container">
+          {DAYS.map(day => (
+            <div className="swipe-slide" key={day}>
+              <DaySlide
                 day={day}
                 entry={plan[day]}
                 onSwap={d => setSwapper({ day: d })}
                 onToggleOut={handleToggleOut}
                 onViewRecipe={meal => setRecipe({ meal, day })}
-                onImageReady={(mealId, imageUrl) => {
-                  setMealCache(prev => prev[mealId] ? { ...prev, [mealId]: { ...prev[mealId], image_url: imageUrl } } : prev);
-                  setPlan(prev => {
-                    const next = { ...prev };
-                    for (const d of DAYS) {
-                      if (next[d]?.meal?.id === mealId) next[d] = { ...next[d], meal: { ...next[d].meal, image_url: imageUrl } };
-                    }
-                    return next;
-                  });
-                }}
+                onImageReady={handleImageReady}
               />
-            ))}
+            </div>
+          ))}
+
+          {/* Extras slide at the end */}
+          <div className="swipe-slide">
+            <div className="extras-slide">
+              <h2 className="extras-slide__title">Extras for the week</h2>
+              <p className="extras-slide__hint">Anything not in the meal plan — milk, yogurt, snacks, household bits…</p>
+
+              <form className="extras-form" onSubmit={handleAddExtra}>
+                <input
+                  className="extras-input"
+                  type="text"
+                  placeholder="e.g. Oat milk, Greek yogurt…"
+                  value={extraInput}
+                  onChange={e => setExtraInput(e.target.value)}
+                />
+                <button className="extras-add-btn" type="submit" disabled={addingExtra}>Add</button>
+              </form>
+
+              {extras.length > 0 && (
+                <ul className="extras-list">
+                  {extras.map(item => (
+                    <li key={item.name} className="extras-item">
+                      <span className="extras-item-name">{item.name}</span>
+                      <button className="extras-remove" onClick={() => handleRemoveExtra(item.name)}>Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-
-          {/* Extras section */}
-          <div className="extras-section">
-            <p className="extras-title">Extras for this week</p>
-            <p className="extras-hint">Add anything you need that isn't in the meal plan — milk, yogurt, snacks…</p>
-
-            <form className="extras-form" onSubmit={handleAddExtra}>
-              <input
-                className="extras-input"
-                type="text"
-                placeholder="e.g. Oat milk, Greek yogurt…"
-                value={extraInput}
-                onChange={e => setExtraInput(e.target.value)}
-              />
-              <button className="extras-add-btn" type="submit" disabled={addingExtra}>
-                Add
-              </button>
-            </form>
-
-            {extras.length > 0 && (
-              <ul className="extras-list">
-                {extras.map(item => (
-                  <li key={item.name} className="extras-item">
-                    <span className="extras-item-name">{item.name}</span>
-                    <button className="extras-remove" onClick={() => handleRemoveExtra(item.name)}>
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </>
+        </div>
       )}
 
       {swapper && (
