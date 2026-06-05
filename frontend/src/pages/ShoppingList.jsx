@@ -22,20 +22,25 @@ export default function ShoppingList({ monday }) {
   const [generating, setGenerating] = useState(false);
   const [matching, setMatching] = useState(false);
   const [matchedProducts, setMatchedProducts] = useState(null);
-  const [checkoutState, setCheckoutState] = useState(null); // null | 'running' | { done } | { error }
-  const [progress, setProgress] = useState([]);
-  const [sessionConnected, setSessionConnected] = useState(null); // null=unknown, bool
+  const [matchError, setMatchError] = useState(null);
+  // Track which products the user has tapped to add (persisted per week)
+  const [addedUrls, setAddedUrls] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`added_${weekStr}`) || '[]')); }
+    catch { return new Set(); }
+  });
 
   useEffect(() => {
     fetchShoppingList(weekStr).then(data => { setList(data); setLoading(false); });
   }, [weekStr]);
 
-  useEffect(() => {
-    fetch(`${BASE}/pepesto/session-status`)
-      .then(r => r.json())
-      .then(d => setSessionConnected(d.connected))
-      .catch(() => setSessionConnected(false));
-  }, []);
+  function markAdded(url) {
+    setAddedUrls(prev => {
+      const next = new Set(prev);
+      next.add(url);
+      localStorage.setItem(`added_${weekStr}`, JSON.stringify([...next]));
+      return next;
+    });
+  }
 
   async function handleGenerate() {
     setGenerating(true);
@@ -52,65 +57,20 @@ export default function ShoppingList({ monday }) {
 
   async function handleMatch() {
     setMatching(true);
-    setMatchedProducts(null);
+    setMatchError(null);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 35000);
     try {
-      const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, {
-        method: 'POST', signal: controller.signal
-      });
+      const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, { method: 'POST', signal: controller.signal });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setMatchedProducts(data);
+      if (!data.items || data.items.length === 0) throw new Error('No products matched — try regenerating the list');
+      setMatchedProducts(data.items);
     } catch (err) {
-      setCheckoutState({ error: err.name === 'AbortError' ? 'Timed out — try again' : err.message });
+      setMatchError(err.name === 'AbortError' ? 'Timed out — try again' : err.message);
     } finally {
       clearTimeout(timeout);
       setMatching(false);
-    }
-  }
-
-  async function runCheckout() {
-    setCheckoutState('running');
-    setProgress([]);
-
-    try {
-      const res = await fetch(`${BASE}/pepesto/checkout?week=${weekStr}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let added = [], failed = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const evt = JSON.parse(line.slice(6));
-            if (evt.type === 'item_done') {
-              setProgress(p => [...p, evt]);
-            }
-            if (evt.type === 'progress') {
-              setProgress(p => [...p, { type: 'progress', step: evt.step }]);
-            }
-            if (evt.type === 'done') {
-              added = evt.added; failed = evt.failed;
-              setCheckoutState({ added, failed });
-            }
-            if (evt.type === 'error') {
-              setCheckoutState({ error: evt.message });
-            }
-          } catch {}
-        }
-      }
-    } catch (err) {
-      setCheckoutState({ error: err.message });
     }
   }
 
@@ -120,7 +80,25 @@ export default function ShoppingList({ monday }) {
   const groups = groupByAisle(items);
   const aisles = [...new Set([...AISLE_ORDER, ...Object.keys(groups)])].filter(a => groups[a]);
   const uncheckedCount = items.filter(i => !i.checked).length;
-  const isRunning = checkoutState === 'running';
+
+  // Matched product helpers
+  const matchedRows = (matchedProducts || [])
+    .map(item => {
+      const best = item.products?.[0]?.product;
+      if (!best?.product_id) return null;
+      return {
+        ingredient: item.item_name,
+        name: best.product_name,
+        url: best.product_id,
+        image: best.pepesto_hosted_image_url || best.image_url,
+        pricePence: best.price?.price,
+        promo: best.price?.promotion?.promo,
+      };
+    })
+    .filter(Boolean);
+
+  const addedCount = matchedRows.filter(r => addedUrls.has(r.url)).length;
+  const total = matchedRows.reduce((s, r) => s + (r.pricePence || 0), 0);
 
   return (
     <div className="page">
@@ -133,7 +111,7 @@ export default function ShoppingList({ monday }) {
 
       {items.length === 0 ? (
         <p className="empty-msg">No items yet — generate the list from your meal plan first.</p>
-      ) : (
+      ) : !matchedProducts ? (
         <>
           {aisles.map(aisle => (
             <div key={aisle} className="aisle-group">
@@ -151,93 +129,56 @@ export default function ShoppingList({ monday }) {
             </div>
           ))}
 
-          {/* Matched products preview */}
-          {matchedProducts && (
-            <div className="matched-products">
-              <p className="matched-title">Matched on Sainsbury's</p>
-              <ul className="matched-list">
-                {(matchedProducts.items || []).map((item, i) => {
-                  const best = item.products?.[0]?.product;
-                  if (!best) return null;
-                  const pricePence = best.price?.price;
-                  const promo = best.price?.promotion?.promo;
-                  return (
-                    <li key={i} className="matched-item">
-                      <div className="matched-item-info">
-                        <span className="matched-ingredient">{item.item_name}</span>
-                        <span className="matched-name">{best.product_name}</span>
-                      </div>
-                      <div className="matched-right">
-                        {pricePence && (
-                          <span className={`matched-price ${promo ? 'matched-price--promo' : ''}`}>
-                            £{(pricePence / 100).toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {matchedProducts.items?.length > 0 && (
-                <p className="matched-total">
-                  Est. total: £{(matchedProducts.items.reduce((sum, item) => {
-                    return sum + (item.products?.[0]?.product?.price?.price || 0);
-                  }, 0) / 100).toFixed(2)}
-                </p>
-              )}
-            </div>
-          )}
+          {matchError && <p className="error-msg">{matchError}</p>}
 
-          {/* Progress log while running */}
-          {isRunning && (
-            <div className="progress-log">
-              {progress.map((p, i) => (
-                <div key={i} className={`progress-item ${p.type === 'item_done' ? (p.success ? 'success' : 'fail') : ''}`}>
-                  {p.type === 'progress' && <span>{p.step}</span>}
-                  {p.type === 'item_done' && <span>{p.success ? '✓' : '✗'} {p.item}{p.success && p.product ? ` → ${p.product}` : ''}</span>}
-                </div>
-              ))}
-              <div className="progress-item">Adding items…</div>
-            </div>
-          )}
-
-          {/* Result */}
-          {checkoutState?.added && (
-            <div className="send-result">
-              <p>Added {checkoutState.added.length} items to your Sainsbury's basket.</p>
-              {checkoutState.failed?.length > 0 && (
-                <p style={{marginTop:6, color:'#dc2626'}}>
-                  Couldn't add: {checkoutState.failed.map(f => f.item).join(', ')}
-                </p>
-              )}
-              <a href="https://www.sainsburys.co.uk/shop/gb/groceries/get-ideas/your-groceries"
-                 target="_blank" rel="noreferrer" className="checkout-link">
-                View basket on Sainsbury's →
-              </a>
-            </div>
-          )}
-
-          {checkoutState?.error && <p className="error-msg">{checkoutState.error}</p>}
-
-          {/* Action buttons */}
           <div className="checkout-section">
-            {!matchedProducts && (
-              <button className="sainsburys-btn sainsburys-btn--preview" onClick={handleMatch} disabled={matching}>
-                {matching ? 'Finding products…' : 'Preview on Sainsbury\'s'}
-              </button>
-            )}
-
-            {sessionConnected === false ? (
-              <div className="connect-prompt">
-                <p>Connect your Sainsbury's account to enable one-tap basket filling.</p>
-                <p className="connect-hint">This is a one-time setup done from your computer — ask in the app chat to run "Connect Sainsbury's".</p>
-              </div>
-            ) : (
-              <button className="sainsburys-btn" onClick={runCheckout} disabled={isRunning || sessionConnected === null}>
-                {isRunning ? 'Adding to basket…' : 'Send to Sainsbury\'s basket'}
-              </button>
-            )}
+            <button className="sainsburys-btn" onClick={handleMatch} disabled={matching}>
+              {matching ? 'Finding products on Sainsbury\'s…' : 'Find products on Sainsbury\'s'}
+            </button>
           </div>
+        </>
+      ) : (
+        // ── Matched products: tap-to-add checklist ──
+        <>
+          <div className="match-header">
+            <button className="back-link" onClick={() => setMatchedProducts(null)}>‹ Back to list</button>
+            <span className="match-progress">{addedCount} / {matchedRows.length} added</span>
+          </div>
+          <p className="match-instructions">
+            Tap <strong>Add</strong> on each item — it opens the Sainsbury's product page where you're logged in. Tap "Add to trolley" there, then come back.
+          </p>
+
+          <ul className="product-list">
+            {matchedRows.map((r, i) => {
+              const isAdded = addedUrls.has(r.url);
+              return (
+                <li key={i} className={`product-row ${isAdded ? 'product-row--added' : ''}`}>
+                  {r.image && <img src={r.image} alt="" className="product-img" />}
+                  <div className="product-info">
+                    <span className="product-ingredient">{r.ingredient}</span>
+                    <span className="product-name">{r.name}</span>
+                    {r.pricePence && (
+                      <span className={`product-price ${r.promo ? 'product-price--promo' : ''}`}>
+                        £{(r.pricePence / 100).toFixed(2)}{r.promo ? ' · offer' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <a href={r.url} target="_blank" rel="noreferrer"
+                     className={`product-add-btn ${isAdded ? 'product-add-btn--added' : ''}`}
+                     onClick={() => markAdded(r.url)}>
+                    {isAdded ? 'Added ✓' : 'Add'}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="match-total">Estimated total: £{(total / 100).toFixed(2)}</div>
+
+          <a href="https://www.sainsburys.co.uk/shop/gb/groceries/get-ideas/your-groceries"
+             target="_blank" rel="noreferrer" className="sainsburys-btn" style={{display:'block', textAlign:'center', textDecoration:'none', marginTop:8}}>
+            Open my Sainsbury's basket →
+          </a>
         </>
       )}
     </div>
