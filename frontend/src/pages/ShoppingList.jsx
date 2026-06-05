@@ -64,14 +64,33 @@ export default function ShoppingList({ monday }) {
       const res = await fetch(`${BASE}/pepesto/match?week=${weekStr}`, { method: 'POST', signal: controller.signal });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      if (!data.items || data.items.length === 0) throw new Error('No products matched — try regenerating the list');
+      if (!data.items || data.items.length === 0) throw new Error('empty');
       setMatchedProducts(data.items);
     } catch (err) {
-      setMatchError(err.name === 'AbortError' ? 'Timed out — try again' : err.message);
+      setMatchError(err.name === 'AbortError' || err.message === 'empty'
+        ? 'Couldn\'t auto-match products (Sainsbury\'s data service may be busy). Use search links instead:'
+        : err.message);
     } finally {
       clearTimeout(timeout);
       setMatching(false);
     }
+  }
+
+  // Fallback: build tap-to-add rows using Sainsbury's own search (no Pepesto needed)
+  function useSearchFallback() {
+    const searchRows = items
+      .filter(i => !i.checked)
+      .map(i => ({
+        item_name: i.name,
+        products: [{
+          product: {
+            product_name: `Search "${i.name}" on Sainsbury's`,
+            product_id: `https://www.sainsburys.co.uk/gol-ui/SearchResults/${encodeURIComponent(i.name)}`,
+          }
+        }],
+      }));
+    setMatchedProducts(searchRows);
+    setMatchError(null);
   }
 
   if (loading) return <div className="page"><div className="loading">Loading…</div></div>;
@@ -129,7 +148,16 @@ export default function ShoppingList({ monday }) {
             </div>
           ))}
 
-          {matchError && <p className="error-msg">{matchError}</p>}
+          {matchError && (
+            <div className="match-fallback">
+              <p className="error-msg" style={{marginBottom: matchError.includes('search links') ? 10 : 0}}>{matchError}</p>
+              {matchError.includes('search links') && (
+                <button className="sainsburys-btn sainsburys-btn--preview" onClick={useSearchFallback}>
+                  Use Sainsbury's search links
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="checkout-section">
             <button className="sainsburys-btn" onClick={handleMatch} disabled={matching}>
