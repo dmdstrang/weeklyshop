@@ -100,9 +100,9 @@ export default function ShoppingList({ monday }) {
             </div>
           ))}
 
-          <a href="https://www.sainsburys.co.uk/gol-ui/trolley" target="_blank" rel="noreferrer"
+          <a href="https://www.sainsburys.co.uk/gol-ui/groceries" target="_blank" rel="noreferrer"
              className="sainsburys-btn" style={{display:'block', textAlign:'center', textDecoration:'none', marginTop:16}}>
-            Open my Sainsbury's trolley →
+            Open Sainsbury's →
           </a>
         </>
       )}
