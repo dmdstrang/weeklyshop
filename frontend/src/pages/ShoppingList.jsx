@@ -36,14 +36,16 @@ export default function ShoppingList({ monday }) {
   }
 
   async function setChecked(item, checked) {
-    const updated = await toggleShoppingItem(weekStr, item.name, checked);
-    setList(updated);
-  }
-
-  // Open Sainsbury's search and tick the item off
-  function handleAddToSainsburys(item) {
-    window.open(searchUrl(item.name), '_blank');
-    if (!item.checked) setChecked(item, true);
+    // Optimistic local update first (so it ticks instantly even when iOS
+    // backgrounds the PWA to hand off to the Sainsbury's app)
+    setList(prev => prev ? {
+      ...prev,
+      items: prev.items.map(i => i.name === item.name ? { ...i, checked } : i),
+    } : prev);
+    try {
+      const updated = await toggleShoppingItem(weekStr, item.name, checked);
+      if (updated) setList(updated);
+    } catch { /* keep optimistic state */ }
   }
 
   if (loading) return <div className="page"><div className="loading">Loading…</div></div>;
@@ -83,9 +85,15 @@ export default function ShoppingList({ monday }) {
                       <span className="shop-item-name">{item.name}</span>
                       {item.qty && <span className="shop-item-qty">{item.qty}</span>}
                     </div>
-                    <button className="shop-add-btn" onClick={() => handleAddToSainsburys(item)}>
+                    <a
+                      className="shop-add-btn"
+                      href={searchUrl(item.name)}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => { if (!item.checked) setChecked(item, true); }}
+                    >
                       {item.checked ? 'Search' : 'Add'}
-                    </button>
+                    </a>
                   </li>
                 ))}
               </ul>
