@@ -171,6 +171,16 @@ export default function MealPlan() {
                 onSwap={d => setSwapper({ day: d })}
                 onToggleOut={handleToggleOut}
                 onViewRecipe={meal => setRecipe({ meal, day })}
+                onImageReady={(mealId, imageUrl) => {
+                  setMealCache(prev => prev[mealId] ? { ...prev, [mealId]: { ...prev[mealId], image_url: imageUrl } } : prev);
+                  setPlan(prev => {
+                    const next = { ...prev };
+                    for (const d of DAYS) {
+                      if (next[d]?.meal?.id === mealId) next[d] = { ...next[d], meal: { ...next[d].meal, image_url: imageUrl } };
+                    }
+                    return next;
+                  });
+                }}
               />
             ))}
           </div>

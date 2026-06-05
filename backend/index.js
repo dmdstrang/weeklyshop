@@ -30,4 +30,9 @@ app.use('/api/pepesto', pepestoRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
+import { ensureBucket } from './lib/images.js';
+
+app.listen(PORT, async () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
+  try { await ensureBucket(); } catch (e) { console.warn('Bucket setup:', e.message); }
+});

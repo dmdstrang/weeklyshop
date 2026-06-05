@@ -19,6 +19,13 @@ export async function fetchMealLibrary() {
   return res.json();
 }
 
+export async function generateMealImage(mealId, force = false) {
+  const res = await fetch(`${BASE}/mealplan/library/${mealId}/image${force ? '?force=1' : ''}`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 export async function fetchSuggestions(week, busyDays = []) {
   const res = await fetch(`${BASE}/suggestions?week=${week}&busyDays=${busyDays.join(',')}`);
   return res.json();

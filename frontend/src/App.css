@@ -110,7 +110,17 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; -we
 }
 .out-toggle--active { background: var(--accent-light); border-color: var(--accent-mid); color: var(--accent); }
 
-.day-card__meal { display: flex; align-items: center; gap: 10px; }
+/* Card body with thumbnail */
+.day-card__body { display: flex; gap: 12px; align-items: stretch; }
+.day-card__thumb { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: var(--bg); }
+.day-card__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.day-card__thumb-placeholder { width: 100%; height: 100%;
+  background: linear-gradient(110deg, var(--bg) 30%, #eef1f3 50%, var(--bg) 70%);
+  background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.day-card__main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+
+.day-card__meal { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .day-card__category {
   font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
   color: var(--accent); background: var(--accent-light); padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
@@ -406,6 +416,11 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; -we
 .day-card__footer { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; }
 .day-card__tap-hint { font-size: 11px; color: var(--text-2); letter-spacing: 0.1px; }
 .day-card__rating { display: flex; gap: 6px; }
+.day-card__actions { display: flex; gap: 8px; align-items: center; }
+
+/* Recipe hero image */
+.recipe-hero-image { width: 100%; height: 200px; overflow: hidden; border-radius: 20px 20px 0 0; }
+.recipe-hero-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rating-pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
 .rating-pill--liked { background: #fef3f2; color: #e11d48; border: 1px solid #fecdd3; }
 .rating-pill--disliked { background: var(--bg); color: var(--text-2); border: 1px solid var(--border); }

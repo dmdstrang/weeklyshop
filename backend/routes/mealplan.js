@@ -1,7 +1,29 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { generateMealImage } from '../lib/images.js';
 
 const router = Router();
+
+// POST /api/mealplan/library/:id/image — generate (or regenerate) a meal image
+router.post('/library/:id/image', async (req, res) => {
+  const { id } = req.params;
+  const { force } = req.query;
+
+  const { data: meal, error } = await supabase
+    .from('meal_library').select('*').eq('id', id).single();
+  if (error || !meal) return res.status(404).json({ error: 'Meal not found' });
+
+  // Return existing image unless forced
+  if (meal.image_url && !force) return res.json({ image_url: meal.image_url });
+
+  try {
+    const image_url = await generateMealImage(meal);
+    res.json({ image_url });
+  } catch (err) {
+    console.error('Image generation failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/mealplan?week=2026-06-01
 router.get('/', async (req, res) => {

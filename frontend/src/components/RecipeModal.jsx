@@ -49,6 +49,12 @@ export default function RecipeModal({ meal: initialMeal, day, onSelect, onClose,
       <div className="recipe-overlay" onClick={onClose}>
         <div className="recipe-sheet" onClick={e => e.stopPropagation()}>
 
+          {meal.image_url && (
+            <div className="recipe-hero-image">
+              <img src={meal.image_url} alt={meal.name} />
+            </div>
+          )}
+
           <div className="recipe-sheet__hero">
             <div className="recipe-handle" />
             <div className="recipe-hero-top">
