@@ -100,10 +100,13 @@ export default function ShoppingList({ monday }) {
             </div>
           ))}
 
-          <a href="https://www.sainsburys.co.uk/gol-ui/groceries" target="_blank" rel="noreferrer"
+          <a href="https://www.sainsburys.co.uk/gol-ui/SearchResults/groceries" target="_blank" rel="noreferrer"
              className="sainsburys-btn" style={{display:'block', textAlign:'center', textDecoration:'none', marginTop:16}}>
-            Open Sainsbury's →
+            Open Sainsbury's app →
           </a>
+          <p className="page-subtitle" style={{textAlign:'center', marginTop:8}}>
+            Then tap the trolley icon (top-right) to review and check out.
+          </p>
         </>
       )}
     </div>
