@@ -18,12 +18,13 @@ export async function ensureBucket() {
 }
 
 function promptFor(meal) {
-  return `A vibrant, appetising overhead food photograph of "${meal.name}". `
-    + `Served on a colourful hand-painted patterned ceramic plate (Mediterranean majolica style), `
-    + `set on a bright, cheerfully patterned Mediterranean tablecloth. `
-    + `Warm sunny natural daylight, fresh ingredients, rich saturated colours, `
-    + `rustic Mediterranean styling, professional food photography, top-down flat lay. `
-    + `No text, no hands, no faces.`;
+  return `A wide, pulled-back food photograph showing a full place setting of "${meal.name}". `
+    + `The meal is served on a colourful hand-painted patterned ceramic plate (Mediterranean majolica style), `
+    + `sitting on a table covered with a bright, cheerfully patterned Mediterranean tablecloth. `
+    + `The entire plate is visible with plenty of the colourful tablecloth surrounding it. `
+    + `Shot from a 35-degree angle showing the table setting, not a close-up. `
+    + `Warm sunny natural daylight, rich saturated colours, rustic Mediterranean styling, `
+    + `professional food photography. No text, no hands, no faces.`;
 }
 
 /**
@@ -50,7 +51,8 @@ export async function generateMealImage(meal) {
   if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  const imageUrl = pub.publicUrl;
+  // Cache-bust: same filename is reused on regenerate, so add a version param
+  const imageUrl = `${pub.publicUrl}?v=${Date.now()}`;
 
   // Save URL back to the meal
   await supabase.from('meal_library').update({ image_url: imageUrl }).eq('id', meal.id);
