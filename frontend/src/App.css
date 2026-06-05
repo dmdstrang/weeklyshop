@@ -302,7 +302,25 @@ body { background: var(--bg); color: var(--text); overscroll-behavior: none; -we
   border-radius: var(--radius); padding: 14px; font-size: 14px; color: var(--text); line-height: 1.5; }
 .connect-hint { font-size: 12px; color: var(--text-2); margin-top: 6px; }
 
-/* ===== Tap-to-add product checklist ===== */
+/* ===== Unified shopping item rows ===== */
+.shop-item { display: flex; align-items: center; gap: 12px; padding: 11px 12px;
+  background: var(--card); border-bottom: 1px solid var(--border); transition: opacity 0.15s; }
+.shop-item:last-child { border-bottom: none; }
+.shop-item--checked { opacity: 0.5; }
+.shop-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--card); flex-shrink: 0; cursor: pointer; padding: 0; transition: all 0.15s; }
+.shop-item--checked .shop-check { background: var(--accent); border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center; }
+.shop-item-text { flex: 1; min-width: 0; cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+.shop-item-name { font-size: 14px; color: var(--text); }
+.shop-item--checked .shop-item-name { text-decoration: line-through; }
+.shop-item-qty { font-size: 12px; color: var(--text-2); }
+.shop-add-btn { flex-shrink: 0; padding: 7px 16px; border-radius: 8px; background: #1a6e3e;
+  color: white; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+.shop-item--checked .shop-add-btn { background: var(--card); color: var(--text-2); border: 1px solid var(--border); }
+
+/* ===== Tap-to-add product checklist (legacy) ===== */
 .match-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .back-link { background: none; border: none; color: var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; padding: 4px 0; }
 .match-progress { font-size: 13px; font-weight: 600; color: var(--text-2); }
